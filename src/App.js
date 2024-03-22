@@ -1,24 +1,223 @@
-import logo from './logo.svg';
-import './App.css';
+import React, { useEffect, useState } from 'react';
+import { Box, Button, Container, Grid, SvgIcon, Typography } from '@mui/material';
+import Search from './components/Search/Search';
+import WeeklyForecast from './components/WeeklyForecast/WeeklyForecast';
+import TodayWeather from './components/TodayWeather/TodayWeather';
+import { addLocation, deleteLocation, fetchLocationData, fetchWeatherData } from './api/index';
+import { transformDateFormat } from './utilities/DatetimeUtils';
+import { ReactComponent as SplashIcon } from './assets/splash-icon.svg';
+import ErrorBox from './components/Reusable/ErrorBox';
+import LoadingBox from './components/Reusable/LoadingBox';
+import { ALL_DESCRIPTIONS } from './utilities/DateConstants';
+import {
+  getTodayForecastWeather,
+  getWeekForecastWeather,
+} from './utilities/DataUtils';
+import ActionAreaCard from './components/Card';
 
 function App() {
+  const [todayWeather, setTodayWeather] = useState(null);
+  const [todayForecast, setTodayForecast] = useState([]);
+  const [weekForecast, setWeekForecast] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [locations, setLocations] = useState([]);
+  const [render, setRender] = useState(false);
+
+  const handleRemove = async(id) => {
+    const res = await deleteLocation(id);
+    setRender(prev => !prev);
+  };
+
+  const searchChangeHandler = async (enteredData) => {
+    const [latitude, longitude] = enteredData.value.split(' ');
+
+    setIsLoading(true);
+
+    const currentDate = transformDateFormat();
+    const date = new Date();
+    let dt_now = Math.floor(date.getTime() / 1000);
+
+    try {
+      const {weather: todayWeatherResponse, forecast: weekForecastResponse} =
+        await fetchWeatherData(latitude, longitude);
+      const all_today_forecasts_list = getTodayForecastWeather(
+        weekForecastResponse,
+        currentDate,
+        dt_now
+      );
+
+      const all_week_forecasts_list = getWeekForecastWeather(
+        weekForecastResponse,
+        ALL_DESCRIPTIONS
+      );
+
+      setTodayForecast([...all_today_forecasts_list]);
+      setTodayWeather({ city: enteredData.label, ...todayWeatherResponse });
+      setWeekForecast({
+        city: enteredData.label,
+        list: all_week_forecasts_list,
+      });
+    } catch (error) {
+      setError(true);
+    }
+
+    setIsLoading(false);
+  };
+
+  const addNewLocation = async (enteredData) => {
+    const [latitude, longitude] = enteredData.value.split(' ');
+
+    const data = {
+      latitude,
+      longitude,
+      name: enteredData.label
+    }
+    try{
+      const res = await addLocation(data);
+    }catch(error){
+      console.log(error)
+    }
+    setRender(prev => !prev);
+  }
+
+  let appContent = (
+    <Box
+      xs={12}
+      display="flex"
+      flexDirection="column"
+      alignItems="center"
+      justifyContent="center"
+      sx={{
+        width: '100%',
+        minHeight: '500px',
+      }}
+    >
+      <SvgIcon
+        component={SplashIcon}
+        inheritViewBox
+        sx={{ fontSize: { xs: '100px', sm: '120px', md: '140px' } }}
+      />
+      <Typography
+        variant="h4"
+        component="h4"
+        sx={{
+          fontSize: { xs: '12px', sm: '14px' },
+          color: 'rgba(255,255,255, .85)',
+          fontFamily: 'Poppins',
+          textAlign: 'center',
+          margin: '2rem 0',
+          maxWidth: '80%',
+          lineHeight: '22px',
+        }}
+      >
+        Explore current weather data and 6-day forecast of more than 200,000
+        cities!
+      </Typography>
+    </Box>
+  );
+
+  if (todayWeather && todayForecast && weekForecast) {
+    appContent = (
+      <React.Fragment>
+        <Grid item xs={12} md={todayWeather ? 6 : 12}>
+          <Grid item xs={12}>
+            <TodayWeather data={todayWeather} forecastList={todayForecast} />
+          </Grid>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <WeeklyForecast data={weekForecast} />
+        </Grid>
+      </React.Fragment>
+    );
+  }
+
+  if (error) {
+    appContent = (
+      <ErrorBox
+        margin="3rem auto"
+        flex="inherit"
+        errorMessage="Something went wrong"
+      />
+    );
+  }
+
+  if (isLoading) {
+    appContent = (
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          width: '100%',
+          minHeight: '500px',
+        }}
+      >
+        <LoadingBox value="1">
+          <Typography
+            variant="h3"
+            component="h3"
+            sx={{
+              fontSize: { xs: '10px', sm: '12px' },
+              color: 'rgba(255, 255, 255, .8)',
+              lineHeight: 1,
+              fontFamily: 'Poppins',
+            }}
+          >
+            Loading...
+          </Typography>
+        </LoadingBox>
+      </Box>
+    );
+  }
+
+  const fetchLocations = async ()=>{
+    const res = await fetchLocationData();
+    setLocations(res)
+  }
+
+  useEffect(()=>{
+    fetchLocations()
+  },[render])
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <Container
+      sx={{
+        maxWidth: { xs: '95%', sm: '80%', md: '1100px' },
+        width: '100%',
+        height: '100%',
+        margin: '0 auto',
+        padding: '1rem 0 3rem',
+        marginBottom: '1rem',
+        borderRadius: {
+          xs: 'none',
+          sm: '0 0 1rem 1rem',
+        },
+        boxShadow: {
+          xs: 'none',
+          sm: 'rgba(0,0,0, 0.5) 0px 10px 15px -3px, rgba(0,0,0, 0.5) 0px 4px 6px -2px',
+        },
+      }}
+    >
+      <Grid container columnSpacing={2}>
+        <Grid item xs={12} >
+          <Search onSearchChange={searchChangeHandler} addLocation={addNewLocation}/>
+        </Grid>
+        {appContent}
+      </Grid>
+      <Grid container columnSpacing={2}>
+        {
+          locations &&
+          locations.map((value,index)=>{
+            return(
+            <Grid item xs={4} >
+              <ActionAreaCard enteredData={value} onSearchChange={searchChangeHandler} handleRemove={handleRemove}/>
+            </Grid>
+            )
+          })
+        }
+      </Grid>
+    </Container>
   );
 }
 
